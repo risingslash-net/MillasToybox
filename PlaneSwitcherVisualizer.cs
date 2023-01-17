@@ -103,8 +103,11 @@ namespace RisingSlash.FP2Mods.MillasToybox
         {
             foreach (GameObject go in planeSwitchersVisualizers)
             {
-                go.SetActive(planeSwitchVisualizersVisible);
-                go.GetComponent<SpriteRenderer>().enabled = planeSwitchVisualizersVisible;
+                if (go != null)
+                {
+                    go.SetActive(planeSwitchVisualizersVisible);
+                    go.GetComponent<SpriteRenderer>().enabled = planeSwitchVisualizersVisible;
+                }
             }
         }
 

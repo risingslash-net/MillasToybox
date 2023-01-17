@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MillasToybox", "MillasToybox.csproj", "{0A9C2D21-9DD5-4C54-B764-85DCF8D2CD7E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PhantomCube", "..\phantom-cube\PhantomCube\PhantomCube.csproj", "{8A8345E5-7DF6-46E9-8264-44A278E20C3C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{0A9C2D21-9DD5-4C54-B764-85DCF8D2CD7E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0A9C2D21-9DD5-4C54-B764-85DCF8D2CD7E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0A9C2D21-9DD5-4C54-B764-85DCF8D2CD7E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A8345E5-7DF6-46E9-8264-44A278E20C3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8A8345E5-7DF6-46E9-8264-44A278E20C3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8A8345E5-7DF6-46E9-8264-44A278E20C3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8A8345E5-7DF6-46E9-8264-44A278E20C3C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

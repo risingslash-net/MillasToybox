@@ -133,20 +133,15 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
                 var go = goNametags[fpp.GetInstanceID()];
                 var tm = tmNametags[fpp.GetInstanceID()];
-                
-                if (goStageCamera != null)
-                {
-                    posRelativeToCam = fpp.transform.position - goStageCamera.transform.position;
-                    posRelativeToCam -= new Vector3(FPCamera.stageCamera.xpos, FPCamera.stageCamera.ypos, 0);
-                    //posRelativeToCam += new Vector3(64, 64, 0);
-                    
-                    // Verticality is reversed here, this needs to subtract the height rather than add to be visible.
-                    posRelativeToCam += new Vector3(FPCamera.stageCamera.xSize/2, -FPCamera.stageCamera.ySize/2, 0);
-                    // Still has the side camera drift going on. Maybe I shouldn't be "relative to camera" at all if it produces floating affect to not move?
-                }
+                tm.transform.parent = fpp.transform;
                 
                 // Move it under the character.
-                go.transform.position = posRelativeToCam + new Vector3(0, -128, 0);
+                go.transform.localPosition = new Vector3(0, 64, 0);
+                go.transform.localScale = new Vector3(Mathf.Abs(go.transform.localScale.x), 
+                    go.transform.localScale.y, 
+                    go.transform.localScale.z);
+                go.transform.rotation = Quaternion.identity;
+                go.layer = go.transform.parent.gameObject.layer;
 
                 // TODO: This is the actual important text bit, don't forget to uncomment this.
                 
@@ -254,6 +249,20 @@ namespace RisingSlash.FP2Mods.MillasToybox
                     tm.text = $"{placeholderNames[index]} ({Mathf.Round(fpp.health)} / {Mathf.Round(fpp.healthMax)})";
                     MillasToybox.Log($"index {index} - newName {tm.text}\n");
                 }
+                
+                tm.transform.parent = fpp.transform;
+                var go = tm.gameObject;
+                // Move it under the character.
+                go.transform.localPosition = new Vector3(0, 64, 0);
+                go.transform.localScale = new Vector3(Mathf.Abs(go.transform.localScale.x), 
+                    go.transform.localScale.y, 
+                    go.transform.localScale.z);
+                go.transform.rotation = Quaternion.identity;
+                go.layer = go.transform.parent.gameObject.layer;
+                var lrs = go.AddComponent<LockRotScale>();
+                lrs.lockQuaternion = Quaternion.identity;
+                lrs.lockScale = Vector3.one;
+                
             }
 
             return goNametag;

@@ -20,7 +20,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
         {
             dt = FPStage.frameTime;
             MillasToybox.SetFP2TDeltaTime(dt);
-            MillasToybox.millasToyboxInstance.OnGameObjectUpdate();
+            //MillasToybox.millasToyboxInstance.OnGameObjectUpdate();
         }
     }
 }

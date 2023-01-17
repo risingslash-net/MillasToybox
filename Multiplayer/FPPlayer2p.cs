@@ -729,6 +729,40 @@ namespace RisingSlash.FP2Mods.MillasToybox
         
         public static void PerformInstaSwap(FPCharacterID charID)
         {
+            try
+            {
+                MillasToybox.Log($"Instaswap to {charID}");
+                var fppOld = FPStage.currentStage.GetPlayerInstance_FPPlayer();
+                var fppNew = Instantiate(FPStage.currentStage.playerList[(int)charID]);
+                
+                fppNew.health = fppOld.health;
+                fppNew.energy = fppOld.energy;
+                fppNew.position = fppOld.position;
+                fppNew.velocity = fppOld.velocity;
+                fppNew.collisionLayer = fppOld.collisionLayer;
+                
+                fppNew.gameObject.SetActive(true);
+                fppNew.activationMode = FPActivationMode.ALWAYS_ACTIVE;
+                fppNew.GetComponent<SpriteRenderer>().enabled = true;
+                fppNew.enabled = true;
+                fppNew.Action_PlayerVoiceArrayStart();
+                
+                FPStage.ValidateStageListPos(fppNew);
+
+                FPStage.currentStage.SetPlayerInstance_FPPlayer(fppNew);
+                Destroy(fppOld);
+
+                MillasToybox.Log($"Instaswap Complete.");
+            }
+            catch (Exception e)
+            {
+                MillasToybox.Log("@@@@@@@@@@@@@@@@@@@@@@");
+                MillasToybox.Log(e.Message + e.StackTrace);
+            }
+        }
+        
+        public static void PerformInstaSwapNewerOld(FPCharacterID charID)
+        {
 
             try
             {

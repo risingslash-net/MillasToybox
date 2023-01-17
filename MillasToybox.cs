@@ -7,6 +7,7 @@ using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using RisingSlash.FP2Mods.MillasToybox.GeneralScripts;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
@@ -35,6 +36,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
         
         public static DateTime fp2ReleaseDate = new DateTime(2022, 9, 13, 12, 0, 0);
         public static int fp2ReleaseDateInt = 20220913;
+
+        public static bool hasInitialized = false;
 
         public enum DataPage
         {
@@ -149,6 +152,12 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
         public static ConfigEntry<string> PHKTogglePlaneSwitcherVisualizers;
         public static ConfigEntry<string> PHKToggleShowColliders;
+        
+        
+        public static ConfigEntry<string> PHKDoSpeedBoost;
+        public static ConfigEntry<string> PHKLaunchPhantomRemote;
+        public static ConfigEntry<float> SpeedBoostValue;
+        public static ConfigEntry<bool> LaunchPhantomRemoteOnStart;
 
         public static ConfigEntry<string> PHKToggleRecordGhostData;
         public static ConfigEntry<string> PHKToggleEnableNetworkPlayers;
@@ -297,6 +306,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
         public static List<SplitScreenCamInfo> SplitScreenCameraInfos = new List<SplitScreenCamInfo>();
 
         private bool instaSwitchCharsSpawned = false;
+        
+        public Vector2 spawnVelocity = Vector2.zero;
 
         public void Awake() // Runs after Game Initialization.
         {
@@ -307,6 +318,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             sLogger.LogInfo("OnApplicationStart");
             //MelonPreferences.Load();
             InitPrefs();
+            sLogger.LogInfo("AfterInitPrefs");
 
             loadedAssetBundles = new List<AssetBundle>();
 
@@ -346,6 +358,10 @@ namespace RisingSlash.FP2Mods.MillasToybox
             showInstructions = ShowInstructionsOnStart.Value;
 
             InitFPLayerNames();
+            sLogger.LogInfo("WakeupComplete");
+
+            var remote = gameObject.AddComponent<FP2TrainerRemoteHandler>();
+            remote.Trainer = this;
         }
 
         private void InitPrefs()
@@ -391,6 +407,10 @@ namespace RisingSlash.FP2Mods.MillasToybox
             DisplayNametags = Config.Bind("General", "DisplayNametags", false);
             // The only real reason that one defaults to false is because this is still meant to be a trainer.
             // If it gets moved into a standalone mod, it'll be made true by default.
+            
+            SpeedBoostValue = Config.Bind("General", "SpeedBoostValue", 15f);
+            LaunchPhantomRemoteOnStart = Config.Bind("General", "LaunchPhantomRemoteOnStart", false);
+            
 
             InitPrefsCustomHotkeys();
         }
@@ -455,6 +475,10 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
             PHKTogglePlaneSwitcherVisualizers = CreateEntryAndBindHotkey("PHKTogglePlaneSwitcherVisualizers", "F3");
             PHKToggleShowColliders = CreateEntryAndBindHotkey("PHKToggleShowColliders", "Shift+F3");
+            
+            PHKDoSpeedBoost  = CreateEntryAndBindHotkey("PHKDoSpeedBoost", "Shift+W");
+            PHKLaunchPhantomRemote = CreateEntryAndBindHotkey("PHKLaunchPhantomRemote", "Tilde");
+            
 
             //PHKNextWarppointSaveSlot = CreateEntryAndBindHotkey("PHKNextWarppointSaveSlot", "F10");
             //PHKPrevWarppointSaveSlot = CreateEntryAndBindHotkey("PHKPrevWarppointSaveSlot", "F9");
@@ -804,11 +828,13 @@ namespace RisingSlash.FP2Mods.MillasToybox
             //GrabAndUpdateCameraDetails();
             VisualizePlaneSwitchers();
 
+            /*
             if (goFP2TrainerYourPlayerIndicator == null)
             {
                 goFP2TrainerYourPlayerIndicator = FP2TrainerYourPlayerIndicator.CreateFPYourPlayerIndicator(
                     "YourPlayer", Vector3.zero, Quaternion.identity, goFP2Trainer.transform);
             }
+            */
         }
 
         private void VisualizePlaneSwitchers()
@@ -922,6 +948,11 @@ namespace RisingSlash.FP2Mods.MillasToybox
             //MelonPreferences.Save();
         }
 
+        public void Update()
+        {
+            OnGameObjectUpdate();
+        }
+
         public void OnGameObjectUpdate()
         {
             try
@@ -932,8 +963,24 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
                 if (bSceneChanged)
                 {
-                    OnSceneWasInitialized(SceneManager.GetActiveScene().buildIndex, activeSceneName);
-                    OnSceneWasLoaded(SceneManager.GetActiveScene().buildIndex, activeSceneName);
+                    hasInitialized = false;
+                }
+
+                if (!hasInitialized)
+                {
+                    try
+                    {
+                        OnSceneWasInitialized(SceneManager.GetActiveScene().buildIndex, activeSceneName);
+                        OnSceneWasLoaded(SceneManager.GetActiveScene().buildIndex, activeSceneName);
+                        hasInitialized = true;
+                    }
+                    catch (Exception e)
+                    {
+                        Log("EXCEPTION\n");
+                        Log(e.ToString());
+                        Log(e.Message);
+                        Log(e.StackTrace);
+                    }
                 }
 
                 if (DeterministicMode.Value)
@@ -1689,7 +1736,10 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
             foreach (var player in fpplayers)
             {
-                FPStage.ValidateStageListPos(player);
+                if (player != null)
+                {
+                    FPStage.ValidateStageListPos(player);
+                }
             }
         }
 
@@ -1925,6 +1975,19 @@ namespace RisingSlash.FP2Mods.MillasToybox
             if (FP2TrainerCustomHotkeys.GetButtonDown(PHKToggleShowColliders))
             {
                 ToggleShowColliders();
+            }
+            
+            if (FP2TrainerCustomHotkeys.GetButtonDown(PHKDoSpeedBoost))
+            {
+                if (FPStage.currentStage != null && FPStage.currentStage.GetPlayerInstance_FPPlayer() != null)
+                {
+                    FPStage.currentStage.GetPlayerInstance_FPPlayer().groundVel = SpeedBoostValue.Value;
+                }
+            }
+            
+            if (FP2TrainerCustomHotkeys.GetButtonDown(PHKLaunchPhantomRemote))
+            {
+                FP2TrainerRemoteHandler.LaunchPhantomCubeRemote();
             }
 
             if (FP2TrainerCustomHotkeys.GetButtonDown(PHKGetOutGetOutGetOut))
@@ -2273,7 +2336,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             }
         }
 
-        private void InstaKOPlayer()
+        public void InstaKOPlayer()
         {
             if (fpplayer)
             {
@@ -3124,6 +3187,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
             component.SetTransitionColor(0f, 0f, 0f);
             component.BeginTransition();
             FPAudio.PlayMenuSfx(3);
+
+            gameObject.AddComponent<SkipScreenTransitionCountdownBar>();
         }
 
         public static void Log(string txt)
