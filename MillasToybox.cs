@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using Rewired;
 using RisingSlash.FP2Mods.MillasToybox.GeneralScripts;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -156,6 +158,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
         
         public static ConfigEntry<string> PHKDoSpeedBoost;
         public static ConfigEntry<string> PHKLaunchPhantomRemote;
+        public static ConfigEntry<bool> EnablePhantomRemotePipes;
         public static ConfigEntry<float> SpeedBoostValue;
         public static ConfigEntry<bool> LaunchPhantomRemoteOnStart;
 
@@ -362,6 +365,10 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
             var remote = gameObject.AddComponent<FP2TrainerRemoteHandler>();
             remote.Trainer = this;
+
+            var goTemp = new GameObject("RewiredInputTweakTool");
+            DontDestroyOnLoad(goTemp);
+            goTemp.AddComponent<RewiredInputTweaks>();
         }
 
         private void InitPrefs()
@@ -410,6 +417,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             
             SpeedBoostValue = Config.Bind("General", "SpeedBoostValue", 15f);
             LaunchPhantomRemoteOnStart = Config.Bind("General", "LaunchPhantomRemoteOnStart", false);
+            EnablePhantomRemotePipes = Config.Bind("General", "EnablePhantomRemotePipes", false);
             
 
             InitPrefsCustomHotkeys();
@@ -795,6 +803,9 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 var hudScript = newHud.GetComponent<FPHudMaster>();
                 //hudScript.onlyShowHealth = true;
                 hudScript.targetPlayer = targetPlayer;
+                var bindPlayerToHud = targetPlayer.gameObject.AddComponent<BindPlayerToHudInstance>();
+                bindPlayerToHud.fpplayer = targetPlayer;
+                bindPlayerToHud.hudMaster = hudScript;
             }
 
 
@@ -1064,11 +1075,21 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
                         if (multiplayerStart && !doneMultiplayerStart)
                         {
-                            currentDataPage = DataPage.MULTIPLAYER_DEBUG;
+                            //currentDataPage = DataPage.MULTIPLAYER_DEBUG;
                             while (fpplayers.Count < MultiCharStartNumChars.Value)
                             {
                                 FPPlayer2p.SpawnExtraCharacter();
                             }
+
+                            var joys = ReInput.players.Players[0].controllers.Joysticks; 
+                            for (int i = 0; i < fpplayers.Count; i++)
+                            {
+                                int iClamp = Mathf.Clamp(i, 0, joys.Count);
+                                Debug.Log("Binding" + fpplayers[i].gameObject.name + " to Controller " + iClamp + " - " + joys[iClamp]);
+                                var manipulator = RewiredInputTweaks.AddControlManipulator(fpplayers[i]);
+                                manipulator.assignedController = joys[iClamp];
+                            }
+
                             if (EnableSplitScreen.Value)
                             {
                                 StartSplitscreen(); // Probably need to include a way to stop this from happening automatically.
@@ -1105,6 +1126,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
                         }
 
                         FPPlayer2p.CatchupIfPlayerTooFarAway();
+                        //FPPlayer2p.UpdateObjectActivationForNonLeadPlayers();
+                        UpdateObjectActivationForAllPlayers(fpplayers);
                     }
 
                     debugDisplay = FP2TrainerAllyControls.funky + "\n" + debugDisplay;
@@ -3323,6 +3346,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 var stageCamera = goStageCamera.GetComponent<FPCamera>(); Log($"{stageCamera}");
                 var renderCamera = goRenderCamera.GetComponent<FPCameraFit>(); Log($"{renderCamera}");
                 var pixelArtTarget = goPixelArtTarget.GetComponent<MeshRenderer>(); Log($"{pixelArtTarget}");
+
+                var hud = GameObject.Find("Stage HUD");
                 
                 
                 
@@ -3393,8 +3418,26 @@ namespace RisingSlash.FP2Mods.MillasToybox
                     }
 
                     //cameraRect = SplitScreenCamInfo.GetCamRectByPlayerIndexAndCount(p, numPlayers);
+                    var goSplitScreenRenderCameraCamComponent = goSplitScreenRenderCamera.GetComponent<Camera>();
+                    var layerName = "BG Layer " + (15 - p);
+                    LayerMask layerMask = LayerMask.GetMask(new string[]{layerName});
+                    Debug.Log("Moving HUD to layer: " + layerName + " -> " + layerMask);
 
-                    goSplitScreenRenderCamera.GetComponent<Camera>().rect = new Rect(cameraRect);
+                    var delayedCullMaskSetter = goSplitScreenStageCamera.AddComponent<LockCameraCullingMask>();
+                    delayedCullMaskSetter.cullingMaskValue = layerMask.value;
+
+                    //var newHud = Instantiate(hud);
+                    //newHud.name += "Player" + p;
+                    var newHud = CloneHealthBar(sortedFPPlayers[p]);
+                    Debug.Log(newHud);
+                    newHud.layer = LayerMask.NameToLayer(layerName);
+                    SetLayerInAllChildren(newHud, newHud.layer);
+                    Debug.Log("Omigor Childs");
+
+
+                    //"UI display"
+
+                    goSplitScreenRenderCameraCamComponent.rect = new Rect(cameraRect);
                     
                 }
 
@@ -3422,10 +3465,43 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 
                 // FPCamera.CreateNewCamera is used to make Lighting cameras, but I don't know when or where it's used so for now it's not factored into this. Fix later.
 
+                if (millasToyboxInstance.pauseMenu != null)
+                {
+                    var newPauseLayerName = "BG Layer " + (15 - 4);
+                    LayerMask layerMaskForPause = LayerMask.GetMask(new string[]{newPauseLayerName});
+                    millasToyboxInstance.pauseMenu.gameObject.layer = layerMaskForPause.value;
+
+                    foreach (var goPauseItem in millasToyboxInstance.pauseMenu.pfButtons)
+                    {
+                        goPauseItem.layer = layerMaskForPause.value;
+                    }
+                    foreach (var goPauseItem in millasToyboxInstance.pauseMenu.pfItemBox)
+                    {
+                        goPauseItem.layer = layerMaskForPause.value;
+                    }
+                }
+
             }
             catch (Exception e)
             {
                 sLogger.LogError($"{e.ToString()}\n{e.Message}\n{e.StackTrace}");
+            }
+        }
+
+        public static void SetLayerInAllChildren(GameObject go, int layer)
+        {
+            for (int k = 0; k < go.transform.childCount; k++)
+            {
+                var childLayer1 = go.transform.GetChild(k);
+                childLayer1.gameObject.layer = layer;
+                
+                SetLayerInAllChildren(childLayer1.gameObject, layer);
+                
+                /*
+                for (int l = 0; l < childLayer1.transform.childCount; l++)
+                {
+                    childLayer1.transform.GetChild(l).gameObject.layer = layer;
+                }*/
             }
         }
 
@@ -3595,5 +3671,451 @@ namespace RisingSlash.FP2Mods.MillasToybox
             }
         }
         */
+        
+        public float[] AssumeLRTBForPlayer(FPPlayer fpp)
+        {
+            float[] lrtb = new float[]
+            {
+                fpp.position.x - 320,
+                fpp.position.x + 320,
+                fpp.position.y - 180,
+                fpp.position.y + 180
+            };
+            return lrtb;
+        }
+        
+        public float[] AssumeLRTBForCamera(FPCamera fpc)
+        {
+            float[] lrtb = new float[]
+            {
+                fpc.left,
+                fpc.right,
+                fpc.top,
+                fpc.bottom
+            };
+            return lrtb;
+        }
+
+        public bool GetActiveInHierarchy(GameObject go)
+        {
+            return go.activeInHierarchy;
+        }
+        
+        public static void SetActiveSafe(GameObject obj, bool value)
+        {
+            if (obj.activeSelf != value)
+            {
+                obj.SetActive(value);
+            }
+        }
+
+        public void UpdateObjectActivationForNonLeadPlayer(FPPlayer fpp)
+        {
+            if (fpp != FPStage.currentStage.GetPlayerInstance_FPPlayer())
+            {
+                UpdateObjectActivationForLRTB(AssumeLRTBForPlayer(fpp));
+            }
+        }
+        
+        public void UpdateObjectActivationForAllPlayers(List<FPPlayer> fpps)
+        {
+            List<LeftRightTopBottom> activeZones = new List<LeftRightTopBottom>();
+            
+            float[] activationAreas;
+            LeftRightTopBottom lrtb;
+            
+            foreach (var fpp in fpps)
+            {
+                activationAreas = AssumeLRTBForPlayer(fpp);
+                lrtb = new LeftRightTopBottom();
+                lrtb.left = activationAreas[0];
+                lrtb.right = activationAreas[1];
+                lrtb.top = activationAreas[2];
+                lrtb.bottom = activationAreas[3];
+                activeZones.Add(lrtb);
+            }
+
+            UpdateObjectActivationForMultiLRTB(activeZones);
+        }
+        
+        public void UpdateObjectActivationForFPStageCameras()
+        {
+            List<LeftRightTopBottom> activeZones = new List<LeftRightTopBottom>();
+            
+            float[] activationAreas;
+            LeftRightTopBottom lrtb;
+            
+            foreach (var fpc in GameObject.FindObjectsOfType<FPCamera>())
+            {
+                activationAreas = AssumeLRTBForCamera(fpc);
+                lrtb = new LeftRightTopBottom();
+                lrtb.left = fpc.left;
+                lrtb.right = fpc.right;
+                lrtb.top = fpc.top;
+                lrtb.bottom = fpc.bottom;
+                activeZones.Add(lrtb);
+            }
+
+            UpdateObjectActivationForMultiLRTB(activeZones);
+        }
+        
+        public void UpdateObjectActivationForMultiLRTB(List<LeftRightTopBottom> activationZones)
+	    {
+            // Unlike the original version of this, we actively skip deactivating any objects as the main P1 script will handle deactivating things without conflicting too much here.
+            try
+            {
+                Type tfpStage = FPStage.currentStage.GetType();
+                
+                var stageObjList = (FPBaseObject[])(tfpStage.GetField("stageObjList", BindingFlags.Static | BindingFlags.NonPublic).GetValue(tfpStage));
+                var stageObjTypeList = (FPObjectPool[])(tfpStage.GetField("stageObjTypeList", BindingFlags.Static | BindingFlags.NonPublic).GetValue(tfpStage));
+                var stageObjPrevActiveState = (bool[])(tfpStage.GetField("stageObjPrevActiveState", BindingFlags.Static | BindingFlags.NonPublic).GetValue(tfpStage));
+                //var currentStage = FPStage.currentStage;
+
+                var stageObjTypeCount = (int)(tfpStage.GetField("stageObjTypeCount", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(FPStage.currentStage));
+                var stageObjSpawnEnd = (int)(tfpStage.GetField("stageObjSpawnEnd", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(FPStage.currentStage));
+                
+		        Vector2 vector = default(Vector2);
+		        int num = stageObjList.Length;
+		        bool flag = false;
+                bool isInZone = false;
+		        for (int i = 0; i < stageObjTypeCount; i++)
+		        {
+			        stageObjTypeList[i].activeListSize = 0;
+		        }
+		        for (int i = 0; i < stageObjSpawnEnd; i++)
+		        {
+			        if (stageObjList[i] != null)
+			        {
+				        stageObjPrevActiveState[i] = GetActiveInHierarchy(stageObjList[i].gameObject);
+			        }
+		        }
+		        for (int i = 0; i < stageObjSpawnEnd; i++)
+		        {
+			        if (stageObjList[i] != null)
+			        {
+				        if (stageObjList[i].stageListPos > -1)
+				        {
+					        if (stageObjList[i].allowFloatPositions)
+					        {
+						        Vector3 position = stageObjList[i].transform.position;
+						        vector.x = position.x;
+						        Vector3 position2 = stageObjList[i].transform.position;
+						        vector.y = position2.y;
+					        }
+					        else
+					        {
+						        vector = stageObjList[i].position;
+					        }
+					        switch (stageObjList[i].activationMode)
+					        {
+					        case FPActivationMode.NEVER_ACTIVE:
+						        SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        break;
+					        case FPActivationMode.ALWAYS_ACTIVE:
+						        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        break;
+					        case FPActivationMode.XY_RANGE:
+                                isInZone = IsObjectInAnyActivationZone(activationZones, stageObjList[i], vector, stageObjList[i].activationMode);
+                                if (isInZone)
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        else
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        break;
+					        case FPActivationMode.X_RANGE:
+                                isInZone = IsObjectInAnyActivationZone(activationZones, stageObjList[i], vector, stageObjList[i].activationMode);
+						        if (isInZone)
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        else
+						        {
+							        //SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        break;
+					        case FPActivationMode.Y_RANGE:
+                                isInZone = IsObjectInAnyActivationZone(activationZones, stageObjList[i], vector, stageObjList[i].activationMode);
+						        if (isInZone)
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        else
+                                {
+                                    //SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        break;
+					        case FPActivationMode.XY_INVERT:
+                                isInZone = !IsObjectInAnyActivationZone(activationZones, stageObjList[i], vector, FPActivationMode.XY_RANGE);
+                                // Possibly bug here, but let's assume this works.
+                                if (isInZone)
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        else
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        break;
+					        }
+				        }
+				        else
+				        {
+					        SetActiveSafe(stageObjList[i].gameObject, value: false);
+				        }
+			        }
+			        else
+			        {
+				        stageObjPrevActiveState[i] = false;
+			        }
+		        }
+		        for (int i = 0; i < stageObjSpawnEnd; i++)
+		        {
+			        if (!(stageObjList[i] != null))
+			        {
+				        continue;
+			        }
+			        flag = GetActiveInHierarchy(stageObjList[i].gameObject);
+			        if (flag)
+			        {
+				        //AddObjectToTypePoolActiveList(stageObjList[i]);
+                        var mAddObjectToTypePoolActiveList = tfpStage.GetMethod("AddObjectToTypePoolActiveList",
+                            BindingFlags.Static | BindingFlags.NonPublic);
+                        var parms = new[] { stageObjList[i] };
+                        mAddObjectToTypePoolActiveList.Invoke(null, BindingFlags.Static | BindingFlags.NonPublic, null, parms, CultureInfo.CurrentCulture);
+                    }
+			        if (stageObjPrevActiveState[i] != flag)
+			        {
+				        if (flag)
+				        {
+					        stageObjList[i].OnActivation();
+				        }
+				        else
+				        {
+					        stageObjList[i].OnDeactivation();
+				        }
+			        }
+		        }
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+
+            
+	    }
+
+        public static bool IsObjectInAnyActivationZone(List<LeftRightTopBottom> activationZones, FPBaseObject stageObject,
+            Vector2 vector, FPActivationMode activationMode)
+        {
+            bool isInZone;
+            isInZone = false;
+            switch (activationMode)
+            {
+                case FPActivationMode.XY_RANGE: 
+                    foreach (var zone in activationZones)
+                    {
+                        if (zone.left - stageObject.activationRange.x <= vector.x &&
+                            vector.x <= zone.right + stageObject.activationRange.x &&
+                            zone.bottom - stageObject.activationRange.y <= vector.y &&
+                            vector.y <= zone.top + stageObject.activationRange.y)
+                        {
+                            isInZone = true;
+                        }
+
+                        break;
+                    }
+                    break;
+                
+                case FPActivationMode.X_RANGE: 
+                    foreach (var zone in activationZones)
+                    {
+                        if (zone.left - stageObject.activationRange.x <= vector.x &&
+                            vector.x <= zone.right + stageObject.activationRange.x)
+                        {
+                            isInZone = true;
+                        }
+
+                        break;
+                    }
+                    break;
+                
+                case FPActivationMode.Y_RANGE: 
+                    foreach (var zone in activationZones)
+                    {
+                        if (zone.bottom - stageObject.activationRange.y <= vector.y &&
+                            vector.y <= zone.top + stageObject.activationRange.y)
+                        {
+                            isInZone = true;
+                        }
+
+                        break;
+                    }
+                    break;
+            }
+            foreach (var zone in activationZones)
+            {
+                if (zone.left - stageObject.activationRange.x <= vector.x &&
+                    vector.x <= zone.right + stageObject.activationRange.x &&
+                    zone.bottom - stageObject.activationRange.y <= vector.y &&
+                    vector.y <= zone.top + stageObject.activationRange.y)
+                {
+                    isInZone = true;
+                }
+
+                break;
+            }
+
+            return isInZone;
+        }
+
+        public void UpdateObjectActivationForLRTB(float[] activationArea)
+	    {
+            // Unlike the original version of this, we actively skip deactivating any objects as the main P1 script will handle deactivating things without conflicting too much here.
+            try
+            {
+                float left = activationArea[0];
+		        float right = activationArea[1];
+		        float top = activationArea[2];
+		        float bottom = activationArea[3];
+
+                Type tfpStage = FPStage.currentStage.GetType();
+                
+                var stageObjList = (FPBaseObject[])(tfpStage.GetField("stageObjList", BindingFlags.Static | BindingFlags.NonPublic).GetValue(tfpStage));
+                var stageObjTypeList = (FPObjectPool[])(tfpStage.GetField("stageObjTypeList", BindingFlags.Static | BindingFlags.NonPublic).GetValue(tfpStage));
+                var stageObjPrevActiveState = (bool[])(tfpStage.GetField("stageObjPrevActiveState", BindingFlags.Static | BindingFlags.NonPublic).GetValue(tfpStage));
+                //var currentStage = FPStage.currentStage;
+
+                var stageObjTypeCount = (int)(tfpStage.GetField("stageObjTypeCount", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(FPStage.currentStage));
+                var stageObjSpawnEnd = (int)(tfpStage.GetField("stageObjSpawnEnd", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(FPStage.currentStage));
+                
+		        Vector2 vector = default(Vector2);
+		        int num = stageObjList.Length;
+		        bool flag = false;
+		        for (int i = 0; i < stageObjTypeCount; i++)
+		        {
+			        stageObjTypeList[i].activeListSize = 0;
+		        }
+		        for (int i = 0; i < stageObjSpawnEnd; i++)
+		        {
+			        if (stageObjList[i] != null)
+			        {
+				        stageObjPrevActiveState[i] = GetActiveInHierarchy(stageObjList[i].gameObject);
+			        }
+		        }
+		        for (int i = 0; i < stageObjSpawnEnd; i++)
+		        {
+			        if (stageObjList[i] != null)
+			        {
+				        if (stageObjList[i].stageListPos > -1)
+				        {
+					        if (stageObjList[i].allowFloatPositions)
+					        {
+						        Vector3 position = stageObjList[i].transform.position;
+						        vector.x = position.x;
+						        Vector3 position2 = stageObjList[i].transform.position;
+						        vector.y = position2.y;
+					        }
+					        else
+					        {
+						        vector = stageObjList[i].position;
+					        }
+					        switch (stageObjList[i].activationMode)
+					        {
+					        case FPActivationMode.NEVER_ACTIVE:
+						        //SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        break;
+					        case FPActivationMode.ALWAYS_ACTIVE:
+						        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        break;
+					        case FPActivationMode.XY_RANGE:
+						        if (left - stageObjList[i].activationRange.x <= vector.x && vector.x <= right + stageObjList[i].activationRange.x && bottom - stageObjList[i].activationRange.y <= vector.y && vector.y <= top + stageObjList[i].activationRange.y)
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        else
+						        {
+							        //SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        break;
+					        case FPActivationMode.X_RANGE:
+						        if (left - stageObjList[i].activationRange.x <= vector.x && vector.x <= right + stageObjList[i].activationRange.x)
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        else
+						        {
+							        //SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        break;
+					        case FPActivationMode.Y_RANGE:
+						        if (bottom - stageObjList[i].activationRange.y <= vector.y && vector.y <= top + stageObjList[i].activationRange.y)
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        else
+                                {
+                                    //SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        break;
+					        case FPActivationMode.XY_INVERT:
+						        if (left - stageObjList[i].activationRange.x <= vector.x && vector.x <= right + stageObjList[i].activationRange.x && bottom - stageObjList[i].activationRange.y <= vector.y && vector.y <= top + stageObjList[i].activationRange.y)
+						        {
+							        //SetActiveSafe(stageObjList[i].gameObject, value: false);
+						        }
+						        else
+						        {
+							        SetActiveSafe(stageObjList[i].gameObject, value: true);
+						        }
+						        break;
+					        }
+				        }
+				        else
+				        {
+					        //SetActiveSafe(stageObjList[i].gameObject, value: false);
+				        }
+			        }
+			        else
+			        {
+				        stageObjPrevActiveState[i] = false;
+			        }
+		        }
+		        for (int i = 0; i < stageObjSpawnEnd; i++)
+		        {
+			        if (!(stageObjList[i] != null))
+			        {
+				        continue;
+			        }
+			        flag = GetActiveInHierarchy(stageObjList[i].gameObject);
+			        if (flag)
+			        {
+				        //AddObjectToTypePoolActiveList(stageObjList[i]);
+                        var mAddObjectToTypePoolActiveList = tfpStage.GetMethod("AddObjectToTypePoolActiveList",
+                            BindingFlags.Static | BindingFlags.NonPublic);
+                        var parms = new[] { stageObjList[i] };
+                        mAddObjectToTypePoolActiveList.Invoke(null, BindingFlags.Static | BindingFlags.NonPublic, null, parms, CultureInfo.CurrentCulture);
+                    }
+			        if (stageObjPrevActiveState[i] != flag)
+			        {
+				        if (flag)
+				        {
+					        stageObjList[i].OnActivation();
+				        }
+				        else
+				        {
+					        //stageObjList[i].OnDeactivation();
+				        }
+			        }
+		        }
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+
+            
+	    }
     }
 }

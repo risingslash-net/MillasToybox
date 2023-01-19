@@ -60,6 +60,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
         private void Start()
         {
+            // This will crunch every time because we don't have these prefabs...
             bossDeathActionsExecuted = false;
             isPaused = false;
             hudPosition.x = 320f + healthBarOffset.x;
@@ -216,6 +217,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
         private void LateUpdate()
         {
+            return;
             AcquireHUDSprites();
             GrabHealthValuesFromTarget();
             

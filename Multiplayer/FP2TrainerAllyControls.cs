@@ -442,7 +442,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
 		        LogDebugOnly("A character is attempting to follow itself as lead. Control types may be misassigned.");
 	        }
         }
-        
+
         public static void HandleAllyControlsGhost(this FPPlayer fpp)
         {
 	        funky = "";
@@ -945,6 +945,13 @@ namespace RisingSlash.FP2Mods.MillasToybox
 			        result = fpp.HandleAllyControlsGhost;
 			        actually = "Ghost";
 			        break;
+		        case AllyControlType.LOCAL_MULTIPLAYER:
+			        RewiredInputTweaks.AddControlManipulator(fpp);
+			        FPPlayer2p.ignoreCatchup = true;
+			        result = fpp.inputMethod;
+			        actually = "Local Gamepad Multiplayer";
+			        break;
+		        /*
 		        case AllyControlType.NETWORK_MULTIPLAYER:
 			        if (MillasToybox.EnableNetworking.Value)
 			        {
@@ -957,6 +964,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
 				        actually = "Player1";
 			        }
 			        break;
+			    */
 		        default:
 			        result = fpp.GetAndRecordInputFromPlayer1;
 			        actually = "Player1";
@@ -979,6 +987,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 else
                 {
                     fppi.inputMethod = fppi.GetInputFromPlayer1; //Only normal controls.
+                    // Possible conflict with control redirection mods?
                 }
             }
         }

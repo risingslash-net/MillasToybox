@@ -410,6 +410,14 @@ namespace RisingSlash.FP2Mods.MillasToybox
             */
         }
 
+        public static void UpdateObjectActivationForNonLeadPlayers()
+        {
+            foreach (var fpp in MillasToybox.fpplayers)
+            {
+                MillasToybox.millasToyboxInstance.UpdateObjectActivationForNonLeadPlayer(fpp);
+            }
+        }
+
         public static FPPlayer SpawnExtraCharacter(bool includeBikeCarol = false)
         {
             FPPlayer newPlayer = null;
@@ -471,9 +479,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 fppi.transform.position + new Vector3(spawnOffset.x, spawnOffset.y, 0);
             //newPlayer.position = FPStage.currentStage.GetPlayerInstance_FPPlayer().position;
 
-            newPlayer.inputMethod =
-                newPlayer
-                    .GetInputFromPlayer1; // So... you can totally just replace the input method here to control the character with anything we want.
+            //newPlayer.inputMethod = newPlayer.GetInputFromPlayer1; // So... you can totally just replace the input method here to control the character with anything we want.
             
 
             newPlayer.name = String.Format("Player {0}", extraPlayerCount);
@@ -503,22 +509,14 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 FP2TrainerCharacterNameTag.instance.InstantiateNewNametag(newPlayer);
             }
 
-            //global::MillasToybox.MillasToybox.CloneHealthBar(newPlayer);
-
-            //DestroyMergaCutsceneTriggers();
-
+            // Mini-HUDs, if we ever get that working.
             /*
-            if (MillasToybox.EnableSplitScreen.Value)
-            {
-                MillasToybox.StartSplitscreen(); // Probably need to include a way to stop this from happening automatically.
-            }
-            */
-
             var fpph = newPlayer.gameObject.AddComponent<FPPlayerHud>();
             fpph.targetPlayer = newPlayer;
             fpph.stopTimerOnDeath = false;
             fpph.healthBarOffset = new Vector2(16, -32 * MillasToybox.fpplayers.Count);
             fpph.enabled = true;
+            */
             
 
             return newPlayer;

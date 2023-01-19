@@ -34,13 +34,16 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
             handler = this;
         }
 
-        pipeServFromTrainer = new NamedPipeServerStream("RSNDreadbox");
-        asyncResult = pipeServFromTrainer.BeginWaitForConnection(meh, null);
-        pipeToRemote = new NamedPipeClientStream("RSNPhantomCube");
-
-        if (MillasToybox.LaunchPhantomRemoteOnStart.Value)
+        if (MillasToybox.EnablePhantomRemotePipes.Value)
         {
-            LaunchPhantomCubeRemote();
+            pipeServFromTrainer = new NamedPipeServerStream("RSNDreadbox");
+            asyncResult = pipeServFromTrainer.BeginWaitForConnection(meh, null);
+            pipeToRemote = new NamedPipeClientStream("RSNPhantomCube");
+
+            if (MillasToybox.LaunchPhantomRemoteOnStart.Value)
+            {
+                LaunchPhantomCubeRemote();
+            }
         }
     }
 
