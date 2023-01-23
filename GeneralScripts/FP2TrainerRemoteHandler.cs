@@ -1,10 +1,12 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Threading;
 using BepInEx;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Debug = UnityEngine.Debug;
 
 namespace RisingSlash.FP2Mods.MillasToybox.GeneralScripts;
 
@@ -12,14 +14,19 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
 {
     public FP2TrainerRemoteHandler handler;
     public string commandString;
-    public NamedPipeServerStream pipeServFromTrainer;
+    public NamedPipeClientStream pipePhantomFromMilla;
     public MillasToybox Trainer;
     private StreamReader reader;
     
-    public NamedPipeClientStream pipeToRemote;
+    public NamedPipeClientStream pipePhantomToMilla;
     private StreamWriter writer;
 
+    public float pollTimer = 1f;
+    public float pollTimerStart = 1f;
+
     public bool sentConnectionMessage = false;
+
+    public bool AllowDebugModeMessages = true;
     
     public IAsyncResult asyncResult;
     public void Start()
@@ -36,79 +43,155 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
 
         if (MillasToybox.EnablePhantomRemotePipes.Value)
         {
-            pipeServFromTrainer = new NamedPipeServerStream("RSNDreadbox");
-            asyncResult = pipeServFromTrainer.BeginWaitForConnection(meh, null);
-            pipeToRemote = new NamedPipeClientStream("RSNPhantomCube");
-
             if (MillasToybox.LaunchPhantomRemoteOnStart.Value)
             {
                 LaunchPhantomCubeRemote();
             }
+
+            ConstructPipes();
+            ConnectPipes();
         }
     }
 
     public static void LaunchPhantomCubeRemote()
     {
-        Thread startserver = new Thread(new ThreadStart(LaunchPhantomCubeRemoteThread));
-        startserver.Start();
+        //Thread startserver = new Process(new ProcessStartInfo(LaunchPhantomCubeRemoteThread));
+        //startserver.Start();
+        LaunchPhantomCubeRemoteProcess();
     }
     
-    public static void LaunchPhantomCubeRemoteThread()
+    public static void LaunchPhantomCubeRemoteProcess()
     {
         var path = Path.Combine(BepInEx.Paths.PluginPath, "MillasToybox");
         path = Path.Combine(path, "PhantomCube.exe");
         Debug.Log("Launching: " + path);
-        System.Diagnostics.Process.Start(path);
+        Process p = new Process { 
+            StartInfo = new ProcessStartInfo(path)
+        };
+        p.Start();
+        //System.Diagnostics.Process.Start(path);
     }
 
     public void Update()
     {
-        PollPipedMessagesFromRemote();
+        pollTimer -= Time.deltaTime;
+        if (pollTimer <= 0)
+        {
+            pollTimer += pollTimerStart;
+            PollPipedMessagesFromRemote();
+        }
         //SendTextThroughPipe();
         //reader.Close();
     }
 
     public void PollPipedMessagesFromRemote()
     {
-        if (pipeServFromTrainer is not { IsConnected: true })
+        if (pipePhantomToMilla is not { IsConnected: true })
         {
+            Debug.Log("No connection established. Attempting to make new connection.");
+            ConnectPipes();
             return;
         }
         else
         {
             if (!sentConnectionMessage)
             {
-                Debug.Log("Phantom: Connection Established.");
+                DebugModeLog("Phantom: Connection Established.");
                 sentConnectionMessage = true;
             }
         }
 
         if (reader == null)
         {
-            reader = new StreamReader(pipeServFromTrainer);   
+            DebugModeLog("Creating reader.");
+            reader = new StreamReader(pipePhantomToMilla);   
         }
-        var line = reader.ReadLine();
-        ParseCommand(line);
+        DebugModeLog("Before Reader Conditional...");
+        if (true || !reader.EndOfStream)
+        {
+            DebugModeLog("Reading Line.");
+            var line = reader.ReadLine();
+            DebugModeLog("Parsing Line.");
+            ParseCommand(line);
+        }
+        else
+        {
+            DebugModeLog("Nothing to read...");
+        }
+
     }
-    
-    
+
+    public void ConstructPipes()
+    {
+        if (pipePhantomFromMilla == null)
+        {
+            Debug.Log("Constructing Pipe From Phantom");
+            pipePhantomFromMilla = new NamedPipeClientStream("RSNPhantomFromMilla");
+        }
+        if (pipePhantomToMilla == null)
+        {
+            Debug.Log("Constructing Pipe To Phantom");
+            pipePhantomToMilla = new NamedPipeClientStream("RSNPhantomToMilla");
+        }
+    }
+
+    private bool ConnectPipes()
+    {
+        bool failed = false;
+        ConstructPipes();
+        try
+        {
+            if (!pipePhantomFromMilla.IsConnected)
+            {
+                Debug.Log("Connecting pipe From Phantom");
+                pipePhantomFromMilla.Connect(1000);
+            }
+            Debug.Log("Succeeded");
+        }
+        catch (Exception e)
+        {
+            failed = true;
+            Debug.LogWarning("Time out when creating pipe connections.");
+            //Debug.LogWarning($"{e.ToString()}\r\n{e.Message}\r\n{e.StackTrace }");
+        }
+        
+        try
+        {
+            if (!pipePhantomToMilla.IsConnected)
+            {
+                Debug.Log("Connecting pipe To Phantom");
+                pipePhantomToMilla.Connect(1000);
+            }
+            Debug.Log("Succeeded");
+        }
+        catch (Exception e)
+        {
+            failed = true;
+            Debug.LogWarning("Time out when creating pipe connections.");
+            //Debug.LogWarning($"{e.ToString()}\r\n{e.Message}\r\n{e.StackTrace }");
+        }
+
+        return failed;
+    }
+
+
     public void SendTextThroughPipe(string text)
     {
         Debug.Log("Attempting to send: " + text);
-        if (pipeToRemote == null) 
+        if (pipePhantomFromMilla == null) 
         {
-            pipeToRemote = new NamedPipeClientStream("RSNPhantomCube");
+            pipePhantomFromMilla = new NamedPipeClientStream("RSNPhantomFromMilla");
         }
-        if (!pipeToRemote.IsConnected) 
+        if (!pipePhantomFromMilla.IsConnected) 
         {
             var failed = false;
-            try { pipeToRemote.Connect(100); }
+            try { failed = ConnectPipes(); }
             catch { failed = true; }
             if (failed) { return; }
         }
         if (writer == null) 
         {
-            writer = new StreamWriter(pipeToRemote);
+            writer = new StreamWriter(pipePhantomFromMilla);
         }
         writer.WriteLine(text);
         writer.Flush();
@@ -123,7 +206,7 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
         
         if (txt.StartsWith("DREADBOX"))
         {
-            Debug.Log("Transmission received: Experiment successful.");
+            Debug.Log("Transmission received: Experiment successful. Terminating test subject.");
             Trainer.InstaKOPlayer();
         }
 
@@ -158,6 +241,7 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
             }
             
         }
+        DebugModeLog("Done parsing command.");
     }
 
     public void GetCharacterIDs()
@@ -220,16 +304,16 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
         return;
         try
         {
-            if (pipeServFromTrainer != null)
+            if (pipePhantomFromMilla != null)
             {
                 Debug.Log("aa");
-                pipeServFromTrainer.Close();
+                pipePhantomFromMilla.Close();
                 Debug.Log("aaa");
-                //pipeServFromTrainer.Disconnect();
+                //pipePhantomFromMilla.Disconnect();
                 if (asyncResult != null)
                 {
                     Debug.Log("aaaa");
-                    pipeServFromTrainer.EndWaitForConnection(res);
+                    //pipePhantomFromMilla.EndWaitForConnection(res);
                     Debug.Log("WHY");
                 }
             }
@@ -244,16 +328,16 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
         Debug.Log("a");
         try
         {
-            if (pipeServFromTrainer != null)
+            if (pipePhantomFromMilla != null)
             {
                 Debug.Log("aa");
-                pipeServFromTrainer.Close();
+                pipePhantomFromMilla.Close();
                 Debug.Log("aaa");
-                //pipeServFromTrainer.Disconnect();
+                //pipePhantomFromMilla.Disconnect();
                 if (asyncResult != null)
                 {
                     Debug.Log("aaaa");
-                    //pipeServFromTrainer.EndWaitForConnection(asyncResult);
+                    //pipePhantomFromMilla.EndWaitForConnection(asyncResult);
                     Debug.Log("WHY");
                 }
             }
@@ -272,9 +356,9 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
         }
         
         Debug.Log("c");
-        if (pipeToRemote != null)
+        if (pipePhantomToMilla != null)
         {
-            pipeToRemote.Close();
+            pipePhantomToMilla.Close();
         }
         
         Debug.Log("d");
@@ -287,5 +371,13 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
             //throw new NotImplementedException();
             
         Application.Quit();
+    }
+
+    public void DebugModeLog(string txt)
+    {
+        if (AllowDebugModeMessages)
+        {
+            Debug.Log(txt);
+        }
     }
 }
