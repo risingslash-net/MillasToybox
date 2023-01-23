@@ -34,6 +34,7 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
     public List<string> messagesReceived;
 
     public Thread ReaderThread;
+    public static Process PhantomCubeProcess;
     public void Start()
     {
         if (handler != null)
@@ -82,10 +83,15 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
         var path = Path.Combine(BepInEx.Paths.PluginPath, "MillasToybox");
         path = Path.Combine(path, "PhantomCube.exe");
         Debug.Log("Launching: " + path);
-        Process p = new Process { 
+        if (PhantomCubeProcess != null && !PhantomCubeProcess.HasExited)
+        {
+            PhantomCubeProcess.CloseMainWindow();
+        }
+
+        PhantomCubeProcess = new Process { 
             StartInfo = new ProcessStartInfo(path)
         };
-        p.Start();
+        PhantomCubeProcess.Start();
         //System.Diagnostics.Process.Start(path);
     }
 
@@ -135,7 +141,7 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
             if (reader == null)
             {
                 DebugModeLog("Creating reader.");
-                reader = new StreamReader(pipePhantomToMilla);   
+                reader = new StreamReader(pipePhantomToMilla);
             }
             DebugModeLog("Before Reader Conditional...");
             if (!reader.EndOfStream)
@@ -149,6 +155,8 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
                 DebugModeLog("Reader stream has ended.");
             }
         }
+
+        return;
     }
 
     public void ConstructPipes()
@@ -331,11 +339,27 @@ public class FP2TrainerRemoteHandler : MonoBehaviour
 
     public void Cleanup()
     {
-        Debug.Log("a");
+        DebugModeLog("a");
         try
         {
             shutdown = true;
-            ReaderThread.Abort();
+            
+            // Forcefeed a read to encourage shutdown. If trying to handle normal communication, don't imitate this.
+            if (pipePhantomToMilla != null)
+            {
+                DebugModeLog("a?");
+                var shutdownWriter = new StreamWriter(pipePhantomToMilla);
+                DebugModeLog("a??");
+                shutdownWriter.WriteLine("SHUTDOWN");
+                DebugModeLog("a???");
+                shutdownWriter.Flush();
+                shutdownWriter.Close();
+                DebugModeLog("a????");
+            }
+            if (PhantomCubeProcess != null && !PhantomCubeProcess.HasExited)
+            {
+                PhantomCubeProcess.CloseMainWindow();
+            }
             if (pipePhantomFromMilla != null)
             {
                 Debug.Log("aa");
