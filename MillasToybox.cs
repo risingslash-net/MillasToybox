@@ -166,9 +166,12 @@ namespace RisingSlash.FP2Mods.MillasToybox
         public static ConfigEntry<string> PHKToggleEnableNetworkPlayers;
 
         public static ConfigEntry<string> PHKRebindAllHotkeys;
+        
+        public static ConfigEntry<string> PHKStartVersus;
 
 
         public static ConfigEntry<bool> MultiCharStartLastSetting;
+        public static ConfigEntry<bool> VersusMultiplayerStart;
         public static ConfigEntry<bool> ShowPlaneSwitcherVisualizersLastSetting;
         public static ConfigEntry<bool> ShowCollidersLastSetting;
         public static ConfigEntry<string> PreferredAllyControlTypeLastSetting;
@@ -268,6 +271,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
         private GameObject stageHUD;
         private GameObject stageSelectMenu;
         public TextMesh textmeshFancyTextPosition;
+        public static TextMesh cloneMeForText;
 
         private float timeoutShowWarpInfo;
 
@@ -386,6 +390,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             enableNoClip = Config.Bind("General", "enableNoClip", false);
 
             MultiCharStartLastSetting = Config.Bind("General", "MultiCharStartLastSetting", false);
+            VersusMultiplayerStart = Config.Bind("General", "VersusMultiplayerStart", true);
             ShowPlaneSwitcherVisualizersLastSetting =
                 Config.Bind("General", "ShowPlaneSwitcherVisualizersLastSetting", false);
             ShowCollidersLastSetting = Config.Bind("General", "ShowCollidersLastSetting", true);
@@ -487,6 +492,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
             PHKDoSpeedBoost  = CreateEntryAndBindHotkey("PHKDoSpeedBoost", "Shift+W");
             PHKLaunchPhantomRemote = CreateEntryAndBindHotkey("PHKLaunchPhantomRemote", "Tilde");
             
+            PHKStartVersus = CreateEntryAndBindHotkey("PHKStartVersus", "M");
+
 
             //PHKNextWarppointSaveSlot = CreateEntryAndBindHotkey("PHKNextWarppointSaveSlot", "F10");
             //PHKPrevWarppointSaveSlot = CreateEntryAndBindHotkey("PHKPrevWarppointSaveSlot", "F9");
@@ -787,6 +794,15 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
             goFancyTextPosition.transform.parent = goStageHUD.transform;
             goFancyTextPosition.transform.localPosition = new Vector3(10, 20, 0);
+            textmeshFancyTextPosition.gameObject.name = "RSNTextMesh";
+            if (cloneMeForText == null)
+            {
+                cloneMeForText = Instantiate(textmeshFancyTextPosition);
+                DontDestroyOnLoad(cloneMeForText);
+                cloneMeForText.gameObject.SetActive(false);
+                cloneMeForText.gameObject.name = "RSNTextMeshCloneMe";
+            }
+
             UpdateFancyText();
         }
 
@@ -1049,13 +1065,18 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
                     debugDisplay = "";
 
+                    if (FPStage.currentStage != null)
+                    {
+                        StartVersusIfSparringOrConfiged();
+                    }
+
                     if (fpplayer != null)
                     {
                         if (hotkeysLoaded)
                         {
                             HandleHotkeys();
                         }
-                        
+
                         try
                         {
                             //This should probably be in its own script:
@@ -1127,7 +1148,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
                         FPPlayer2p.CatchupIfPlayerTooFarAway();
                         //FPPlayer2p.UpdateObjectActivationForNonLeadPlayers();
-                        UpdateObjectActivationForAllPlayers(fpplayers);
+                        //UpdateObjectActivationForAllPlayers(fpplayers);
                     }
 
                     debugDisplay = FP2TrainerAllyControls.funky + "\n" + debugDisplay;
@@ -2012,6 +2033,11 @@ namespace RisingSlash.FP2Mods.MillasToybox
             {
                 FP2TrainerRemoteHandler.LaunchPhantomCubeRemote();
             }
+            
+            if (FP2TrainerCustomHotkeys.GetButtonDown(PHKStartVersus))
+            {
+                RSNVersusManager.Init();
+            }
 
             if (FP2TrainerCustomHotkeys.GetButtonDown(PHKGetOutGetOutGetOut))
             {
@@ -2056,6 +2082,41 @@ namespace RisingSlash.FP2Mods.MillasToybox
             */
 
             HandleNoClip();
+        }
+
+        public static void StartVersusIfSparringOrConfiged()
+        {
+            bool doStart = bSceneChanged && SceneManager.GetActiveScene().name.Equals("RoyalPalace_Sparring");
+
+            if (bSceneChanged && VersusMultiplayerStart.Value)
+            {
+                doStart = true;
+            }
+            
+
+            if (doStart)
+            {
+                Debug.Log("Auto-Starting Multiplayer.");
+                //ArenaSpawner
+                RSNVersusManager.Init();
+                RSNVersusManager.DummyOutPlayerBosses();
+                var arenaSpawner = Component.FindObjectOfType<ArenaSpawner>();
+                if (arenaSpawner != null)
+                {
+                    for (int i = 0; i < arenaSpawner.challenges.Length;i++)
+                    {
+                        var challenge = arenaSpawner.challenges[i];
+                        challenge.spawnAtStart = new FPBaseObject[0];
+                        
+                        for (int j = 0; j < challenge.roundObjectList.Length;j++)
+                        {
+                            var roundObject = challenge.roundObjectList[j];
+                            roundObject.waitForObjectDestruction = true;
+                            roundObject.objectList = new FPBaseObject[0];
+                        }
+                    }
+                }
+            }
         }
 
         public static void ToggleShowColliders()

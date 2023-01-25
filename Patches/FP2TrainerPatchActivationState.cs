@@ -9,18 +9,21 @@ public class FP2TrainerPatchActivationState
 {
     public static bool Prefix()
     {
-        try
+        bool usePatch = false;
+        if (usePatch)
         {
-            // The code inside this method will run before 'UpdateObjectActivation' is executed
-            //MillasToybox.millasToyboxInstance.UpdateObjectActivationForAllPlayers(MillasToybox.fpplayers);
-            MillasToybox.millasToyboxInstance.UpdateObjectActivationForFPStageCameras();
+            try
+            {
+                // The code inside this method will run before 'UpdateObjectActivation' is executed
+                //MillasToybox.millasToyboxInstance.UpdateObjectActivationForAllPlayers(MillasToybox.fpplayers);
+                MillasToybox.millasToyboxInstance.UpdateObjectActivationForFPStageCameras();
+            }
+            catch (Exception e)
+            {
+                MillasToybox.LogError($"{e.ToString()}\n{e.Message}\n{e.StackTrace}");
+            }
         }
-        catch (Exception e)
-        {
-            MillasToybox.LogError($"{e.ToString()}\n{e.Message}\n{e.StackTrace}");
-        }
-
         // Returning false causes the original method this is patching to be skipped.
-        return false;
+        return !usePatch;
     }
 }

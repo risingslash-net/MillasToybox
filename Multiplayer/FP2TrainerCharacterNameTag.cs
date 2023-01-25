@@ -262,7 +262,9 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 var lrs = go.AddComponent<LockRotScale>();
                 lrs.lockQuaternion = Quaternion.identity;
                 lrs.lockScale = Vector3.one;
-                
+
+                BindNametagToPlayerInfo.Bind(tm, fpp);
+
             }
 
             return goNametag;

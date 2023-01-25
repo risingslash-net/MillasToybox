@@ -521,6 +521,71 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
             return newPlayer;
         }
+        
+        public static FPPlayer SpawnExtraCharacterByID(FPCharacterID fpCharacterID)
+        {
+            FPPlayer newPlayer = null;
+            FPPlayer fppi = FPStage.currentStage.GetPlayerInstance_FPPlayer();
+            bool playerObjectValidated = false;
+
+            extraPlayerCount++;
+
+            newPlayer = FPStage.InstantiateFPBaseObject(FPStage.player[(int)fpCharacterID],
+                out playerObjectValidated);
+
+            
+            newPlayer.gameObject.transform.position =
+                fppi.transform.position + new Vector3(spawnOffset.x, spawnOffset.y, 0);
+            //newPlayer.position = FPStage.currentStage.GetPlayerInstance_FPPlayer().position;
+
+            //newPlayer.inputMethod = newPlayer.GetInputFromPlayer1; // So... you can totally just replace the input method here to control the character with anything we want.
+            
+
+            newPlayer.name = String.Format("Player {0}", extraPlayerCount);
+
+            newPlayer.inputMethod = DummyInputMethod;
+
+            newPlayer.oxygenLevel = 1f;
+            newPlayer.heatLevel = 0f;
+            newPlayer.interactWithObjects = true;
+
+            if (fppi != null)
+            {
+                newPlayer.position = fppi.position + (spawnOffset * (extraPlayerCount + 1));
+                
+                newPlayer.collisionLayer = fppi.collisionLayer;
+                newPlayer.powerups = fppi.powerups;
+                newPlayer.potions = fppi.potions;
+                newPlayer.totalCrystals = fppi.crystals;
+                newPlayer.hasSpecialItem = fppi.hasSpecialItem;
+            }
+
+
+            MillasToybox.fpplayers = MillasToybox.GetFPPlayers();
+            MillasToybox.Log(FPStage.currentStage.GetPlayerInstance_FPPlayer().name + " joins the party!");
+
+            if (FP2TrainerCharacterNameTag.instance != null)
+            {
+                FP2TrainerCharacterNameTag.instance.InstantiateNewNametag(newPlayer);
+            }
+
+            // Mini-HUDs, if we ever get that working.
+            /*
+            var fpph = newPlayer.gameObject.AddComponent<FPPlayerHud>();
+            fpph.targetPlayer = newPlayer;
+            fpph.stopTimerOnDeath = false;
+            fpph.healthBarOffset = new Vector2(16, -32 * MillasToybox.fpplayers.Count);
+            fpph.enabled = true;
+            */
+            
+
+            return newPlayer;
+        }
+
+        public static void DummyInputMethod()
+        {
+            
+        }
 
         public static FPPlayer SpawnExtraCharacterExperimental1()
         {
