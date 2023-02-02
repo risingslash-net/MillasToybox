@@ -20,7 +20,6 @@ namespace RisingSlash.FP2Mods.MillasToybox
     [BepInProcess("FP2.exe")]
     public class MillasToybox : BaseUnityPlugin
     {
-        private ConfigEntry<string> configGreeting;
         private ConfigEntry<bool> configDisplayGreeting;
         
         private ConfigEntry<string> configLastKnownScene;
@@ -34,6 +33,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
         
         public static GameObject goFP2Trainer;
         public static PlaneSwitcherVisualizer planeSwitcherVisualizer;
+        public static CameraHotspotVisualizer cameraHotspotVisualizer;
         public static GameObject goFP2TrainerYourPlayerIndicator;
         
         public static DateTime fp2ReleaseDate = new DateTime(2022, 9, 13, 12, 0, 0);
@@ -45,6 +45,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
         {
             MOVEMENT,
             MOVEMENT_2,
+            MOVEMENT_3,
+            FPPlayerCustom,
             COMBAT,
             DPS,
             DPS_ALL,
@@ -53,6 +55,8 @@ namespace RisingSlash.FP2Mods.MillasToybox
             NO_CLIP,
             CAMERA,
             CAMERA_ALL,
+            LIST_ACTIVES,
+            LIST_ACTIVES_PUSHERS,
             NONE
         }
 
@@ -194,6 +198,9 @@ namespace RisingSlash.FP2Mods.MillasToybox
         public static ConfigEntry<bool> DeterministicMode;
         
         public static ConfigEntry<bool> DisplayNametags;
+
+        public static ConfigEntry<float> FontOpacity;
+        public static ConfigEntry<string> DataDisplayCustomPageFields;
 
         public static bool hotkeysLoaded = false;
 
@@ -377,13 +384,6 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
         private void InitPrefs()
         {
-            //fp2Trainer = MelonPreferences.CreateCategory("fp2Trainer");
-            
-            configGreeting = Config.Bind("General",      // The section under which the option is shown
-                "GreetingText",  // The key of the configuration option in the configuration file
-                "Hello, world!", // The default value
-                "A greeting text to show when the game is launched"); // Description of the option to show in the config file
-            
             enableWarps = Config.Bind("General", "enableWarps", true);
             BootupLevel = Config.Bind("General", "bootupLevel", "");
             showDebug = Config.Bind("General", "showDebug", true);
@@ -417,6 +417,10 @@ namespace RisingSlash.FP2Mods.MillasToybox
             EnableSplitScreen = Config.Bind("General", "EnableSplitScreen", false);
             EnableGetPlayerInstanceMultiplayerPatch = Config.Bind("General", "EnableGetPlayerInstanceMultiplayerPatch", false);
             DisplayNametags = Config.Bind("General", "DisplayNametags", false);
+            FontOpacity = Config.Bind("General", "FontOpacity", 0.50f);
+            DataDisplayCustomPageFields = Config.Bind("General", "DataDisplayCustomPageFields"
+                ,"forcefulAccelerationTimer, inputLock, crystalBonus, currentStage.stageName, currentStage.checkpointHasSpecialItem, crystalBonusTimer, idleTimer," +
+                 "invincibilityTime, genericTimer, barTimer, ");
             // The only real reason that one defaults to false is because this is still meant to be a trainer.
             // If it gets moved into a standalone mod, it'll be made true by default.
             
@@ -664,6 +668,9 @@ namespace RisingSlash.FP2Mods.MillasToybox
             {
                 planeSwitcherVisualizer.Reset();
                 planeSwitcherVisualizer.SpawnVisualizers();
+                
+                cameraHotspotVisualizer.Reset();
+                cameraHotspotVisualizer.SpawnVisualizers();
             }
 
             planeSwitchVisualizersCreated = false;
@@ -690,6 +697,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             GameObject.DontDestroyOnLoad(goFP2Trainer);
             goFP2Trainer.AddComponent<FP2TrainerCustomHotkeys>();
             planeSwitcherVisualizer = goFP2Trainer.AddComponent<PlaneSwitcherVisualizer>();
+            cameraHotspotVisualizer = goFP2Trainer.AddComponent<CameraHotspotVisualizer>();
             goFP2Trainer.AddComponent<FP2TrainerCharacterNameTag>();
             if (SixtyFPSHack.Value)
             {
@@ -726,6 +734,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 textmeshFancyTextPosition.GetComponent<MeshRenderer>().materials[0] = fpMenuMaterial;
                 textmeshFancyTextPosition.characterSize = 10;
                 textmeshFancyTextPosition.anchor = TextAnchor.UpperLeft;
+                textmeshFancyTextPosition.color = new Color(1, 1, 1, FontOpacity.Value);
                 Log("Successfully cloned Resume Text. Attaching to Stage HUD.");
             }
             else if (goStageHUD != null)
@@ -871,6 +880,9 @@ namespace RisingSlash.FP2Mods.MillasToybox
                 MillasToybox.Log("PSV Not Null");
                 planeSwitcherVisualizer.SpawnVisualizers();
                 planeSwitcherVisualizer.SetActiveOfSpawnedVisualizers(planeSwitchVisualizersVisible);
+                
+                cameraHotspotVisualizer.SpawnVisualizers();
+                cameraHotspotVisualizer.SetActiveOfSpawnedVisualizers(planeSwitchVisualizersVisible);
             }
             else
             {
@@ -915,6 +927,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             if (planeSwitcherVisualizer != null)
             {
                 planeSwitcherVisualizer.SetActiveOfSpawnedVisualizers(planeSwitchVisualizersVisible);
+                cameraHotspotVisualizer.SetActiveOfSpawnedVisualizers(planeSwitchVisualizersVisible);
                 return;
             }
 
@@ -936,6 +949,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             if (planeSwitcherVisualizer != null)
             {
                 planeSwitcherVisualizer.SetActiveOfSpawnedVisualizers(planeSwitchVisualizersVisible);
+                cameraHotspotVisualizer.SetActiveOfSpawnedVisualizers(planeSwitchVisualizersVisible);
                 return;
             }
 
@@ -1284,7 +1298,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
 
             if (currentDataPage == DataPage.MOVEMENT)
             {
-                debugDisplay += "Movement (1/2): \n";
+                debugDisplay += "Movement (1/3): \n";
                 if (playerValuesToShow.Contains("Pos")) debugDisplay += "Pos: " + fpplayer.position + "\n";
                 if (playerValuesToShow.Contains("Vel")) debugDisplay += "Vel: " + fpplayer.velocity + "\n";
                 if (playerValuesToShow.Contains("Magnitude"))
@@ -1302,7 +1316,7 @@ namespace RisingSlash.FP2Mods.MillasToybox
             }
             else if (currentDataPage == DataPage.MOVEMENT_2)
             {
-                debugDisplay += "Movement (2/2): \n";
+                debugDisplay += "Movement (2/3): \n";
 
                 debugDisplay += "Collision Layer: " + collisionLayerName + "\n";
                 debugDisplay += "PlaneSwitcherVisualizers: " + planeSwitchVisualizersVisible.ToString() + "\n";
@@ -1320,6 +1334,48 @@ namespace RisingSlash.FP2Mods.MillasToybox
                     debugDisplay += "Gravity Angle: " + fpplayer.gravityAngle + "\n";
                 if (playerValuesToShow.Contains("Gravity Strength"))
                     debugDisplay += "Gravity Strength: " + fpplayer.gravityStrength + "\n";
+            }
+            else if (currentDataPage == DataPage.MOVEMENT_3)
+            {
+                debugDisplay += "Movement (3/3): \n";
+
+                debugDisplay += "Collision Layer: " + collisionLayerName + "\n";
+                debugDisplay += GetFieldText(fpplayer, "groundFallback");
+                debugDisplay += GetFieldText(fpplayer, "groundFallbackTimer");
+                debugDisplay += GetFieldText(fpplayer, "position");
+                debugDisplay += GetFieldText(fpplayer, "velocity");
+                debugDisplay += GetFieldText(fpplayer, "angle");
+                debugDisplay += GetFieldText(fpplayer, "prevGroundAngle");
+                // debugDisplay += GetFieldText(fpplayer, "platformVelocity");
+                // debugDisplay += GetFieldText(fpplayer, "scale");
+                // debugDisplay += GetFieldText(fpplayer, "collisionLayer");
+            }
+            else if (currentDataPage == DataPage.FPPlayerCustom)
+            {
+                debugDisplay += "FPPlayer Custom:\n";
+
+                debugDisplay += "Collision Layer: " + collisionLayerName + "\n";
+                
+                var fields = DataDisplayCustomPageFields.Value.Trim().Split(',');
+                var field = "";
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    if (fields[i].IsNullOrWhiteSpace())
+                    {
+                        continue;
+                    }
+
+                    field = fields[i].Trim();
+                    string currentStageToken = "currentstage.";
+                    if (field.ToLower().StartsWith(currentStageToken))
+                    {
+                        debugDisplay += GetFieldText(FPStage.currentStage, field.Substring(currentStageToken.Length));
+                    }
+                    else
+                    {
+                        debugDisplay += GetFieldText(fpplayer, field);
+                    }
+                }
             }
             else if (currentDataPage == DataPage.COMBAT)
             {
@@ -1448,6 +1504,82 @@ namespace RisingSlash.FP2Mods.MillasToybox
                     debugDisplay +=
                         "Unable to find relevant enemies.\nTry switching to this view while the healthbar is visible.\n";
             }
+            else if (currentDataPage == DataPage.LIST_ACTIVES)
+            {
+                debugDisplay += "StageObjList: \n";
+
+                if (FPStage.currentStage != null)
+                {
+                    var fieldInfo = FPStage.currentStage.GetType()
+                        .GetField("stageObjList", BindingFlags.Static | BindingFlags.NonPublic);
+                    FPBaseObject[] stageObjList = (FPBaseObject[])(fieldInfo.GetValue(FPStage.currentStage));
+                    for (int i = 0; i < stageObjList.Length; i++)
+                    {
+                        if (stageObjList[i] != null && stageObjList[i].enabled && stageObjList[i].isActiveAndEnabled)
+                        {
+                            debugDisplay += $"{stageObjList[i].name}:Act+En?{stageObjList[i].isActiveAndEnabled}\n";
+                        }
+                    }
+                }
+            }
+            else if (currentDataPage == DataPage.LIST_ACTIVES_PUSHERS)
+            {
+                debugDisplay += "StageObjList (Pushers Only): \n";
+
+                if (FPStage.currentStage != null)
+                {
+                    var fieldInfo = FPStage.currentStage.GetType()
+                        .GetField("stageObjList", BindingFlags.Static | BindingFlags.NonPublic);
+                    FPBaseObject[] stageObjList = (FPBaseObject[])(fieldInfo.GetValue(FPStage.currentStage));
+                    for (int i = 0; i < stageObjList.Length; i++)
+                    {
+                        if (stageObjList[i] != null
+                            && stageObjList[i].name.StartsWith("Pusher"))
+                        {
+                            debugDisplay +=
+                                $"{stageObjList[i].name}:[En?{stageObjList[i].enabled}][Act+En?{stageObjList[i].isActiveAndEnabled}]\n";
+                        }
+                    }
+                }
+            }
+        }
+
+        public static string GetFieldText(System.Object instance, string fieldName)
+        {
+            var txt = "";
+            try
+            {
+                // this part based on: https://stackoverflow.com/questions/6961781/reflecting-a-private-field-from-a-base-class
+
+                Type t = instance.GetType();
+                FieldInfo fi = null;
+
+                while (t != null) 
+                {
+                    fi = t.GetField(fieldName,
+                        BindingFlags.FlattenHierarchy | BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+
+                    if (fi != null) break;
+
+                    t = t.BaseType; 
+                }
+                
+
+                if (fi != null)
+                {
+                    var val = fi.GetValue(instance);
+                    txt = $"{fieldName}: {val.ToString()}\n";
+                }
+                else
+                {
+                    txt = $"{fieldName}: [Invalid Field?]\n";
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            return txt;
         }
 
         public void HandleInstructionPageDisplay()
